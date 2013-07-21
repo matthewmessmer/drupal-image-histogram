@@ -1,0 +1,9 @@
+name = Histogram
+description = "Create Histograms for Image Nodes"
+package = Image
+core = 7.x
+version = "7.x-1.x-dev"
+dependencies[] = image
+dependencies[] = field_ui
+files[]=histogram.module
+configure = admin/config/media/histogram
