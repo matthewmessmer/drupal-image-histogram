@@ -9,24 +9,28 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
   }
 //HISTOGRAM VARIABLES
   $source_file = file_create_url($image);
-  $path = str_replace('public:/', variable_get('file_public_path', 'sites/default/files'), $image);
-  $file_basename = drupal_basename($image);
   $maxheight = 100;
   $iscolor = FALSE;
-  $im = ImageCreateFromJpeg($source_file);
+  $path = str_replace('public:/', variable_get('file_public_path', 'sites/default/files'), $image);
+  $file_basename = drupal_basename($image);
   $directory = str_replace($file_basename,"",$path);
   $directory .= 'histograms';
   if (!is_dir($directory)) {
     drupal_mkdir($directory);
   };
 
+  $im = ImageCreateFromJpeg($source_file);
   $imgw = imagesx($im);
   $imgh = imagesy($im);
   $n = $imgw * $imgh;
+  $step = 4;
+
   $histo = array();
   $histoR = array();
   $histoG = array();
   $histoB = array();
+  $histoComplete = array();
+  $histogram = array();
 
   $histoRcompiled = array();
   $histoGcompiled = array();
@@ -43,8 +47,8 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
 
 // CALCULATE PIXELS
 
-  for ($i = 0; $i < $imgw; $i++) {
-    for ($j = 0; $j < $imgh; $j++) {
+  for ($i = 0; $i < $imgw; $i += $step) {
+    for ($j = 0; $j < $imgh; $j += $step) {
       $rgb = ImageColorAt($im, $i, $j);
       $r = ($rgb >> 16) & 0xFF;
       $g = ($rgb >> 8) & 0xFF;
@@ -62,7 +66,7 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
   }
   imagedestroy($im);
 
-// COLOR OR GRAYSCALE
+// AUTOMATIC GRAYSCALE DETECTION
   if ($forcebw != TRUE) {
     for ($a = 0; $a < count($histoR); $a++) {
       if ($histoR[$a] != $histoG[$a] || $histoG[$a] != $histoB[$a]) {
@@ -84,14 +88,21 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
 
 // CONVERT BACKGROUND COLOR TO RGB
 
-  $rgbcolor = histogram_html2rgb($color);
+  if (empty($color)) {
+    imagealphablending($imR, false);
+    imagesavealpha($imR, true);
+    $back = imagecolorallocatealpha($imR, 0, 0, 0, 127);
+  } else {
+    $rgbcolor = histogram_html2rgb($color);
+    // MAKE BACKGROUND
+    $back = imagecolorallocate($imR, $rgbcolor[0], $rgbcolor[1], $rgbcolor[2]);
+  }
+
 
 
 //RGB
 
   if ($iscolor) {
-    // MAKE BACKGROUND
-    $back = imagecolorallocate($imR, $rgbcolor[0], $rgbcolor[1], $rgbcolor[2]);
 
     // compute bounds of vertical axis
 
@@ -117,6 +128,7 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
     if ($histType == '1') {
       // COMBINED COLOR HISTOGRAM
       imagefilledrectangle($imR, 0, 0, 256, 100, $back);
+      imagefill($imR, 0, 0, $back);
 
       // CREATE GRAPH
       for ($a = 0; $a < 256; $a++) {
@@ -125,6 +137,7 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
           min($histoG[$a] / $histoClip, 1.0) * $maxheight,
           min($histoB[$a] / $histoClip, 1.0) * $maxheight
         );
+        $histoComplete[$a] = $heightsRGB;
         $lineOrder = array(0, 1, 2);
         array_multisort($heightsRGB, $lineOrder);
 
@@ -153,6 +166,7 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
     }
     else { // SEPARATE R G B HISTOGRAMS
       imagefilledrectangle($imR, 0, 0, 256, 300, $back);
+      imagefill($imR, 0, 0, $back);
 
       // CREATE GRAPH
       for ($a = 0; $a < 256; $a++) {
@@ -194,11 +208,10 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
     $histoClip = (1.0 - $lerpFactor) * $sortedHisto[255] + $lerpFactor * $sortedHisto[250];
 
     // CREATE HISTOGRAM BACKGROUND
-    $back = imagecolorallocate($imR, $rgbcolor[0], $rgbcolor[1], $rgbcolor[2]);
     imagefilledrectangle($imR, 0, 0, 256, 100, $back);
 
     // MAKE HISTOGRAM COLOR NOT MATCH BACKGROUND LIGHTNESS
-    if ((($rgbcolor[0] + $rgbcolor[0] + $rgbcolor[0]) / 3) < 127) {
+    if (empty($color) || (($rgbcolor[0] + $rgbcolor[0] + $rgbcolor[0]) / 3) < 127) {
       $graphcolor = 255;
     }
     else {
@@ -209,6 +222,7 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
     // CREATE HISTOGRAM
     for ($a = 0; $a < 256; $a++) {
       $h = min($histo[$a] / $histoClip, 1.0) * $maxheight;
+      $histoComplete[$a] = $h;
       $start = ($maxheight - $h);
       imageline($imR, ($a + 1), $start, ($a + 1), $maxheight, $text_color);
     }
@@ -245,9 +259,10 @@ function histogram_make_histogram($image, $color = "#000000", $forcebw = FALSE, 
 
     }
 
-    imagejpeg($imR, $directory . "/hist_" . $file_basename, 100);
-    $histogram = $directory . "/hist_" . $file_basename;
-    chmod($histogram, 0644);
+    imagepng($imR, $directory . "/hist_" . $file_basename . ".png");
+    $histogram[0] = $directory . "/hist_" . $file_basename . ".png";
+    $histogram[1] = $histoComplete;
+    //chmod($histogram[0], 0644);
     imagedestroy($imR);
     $perms = fileperms($directory);
     drupal_set_message(t('Histogram Created.'));

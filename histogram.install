@@ -29,6 +29,12 @@ function histogram_field_schema($field) {
       'not null' => FALSE,
     );
 
+    $schema['columns']['histovalues'] = array(
+      'type' => 'text',
+      'serialize' => TRUE,
+      'not null' => FALSE,
+    );
+
     $schema['columns']['forcebw'] = array(
       'type' => 'int',
       'default' => 0,

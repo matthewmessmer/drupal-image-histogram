@@ -83,8 +83,9 @@ function histogram_generate_histogram($object_type, $object) {
       include_once drupal_get_path('module', 'histogram') . '/histogram.php';
       $histogram_path = histogram_make_histogram($imageURI, $bgcolor, $forcebw, $histType);
 
-      $histogram[$language][0]['name'] = $histogram_path;
+      $histogram[$language][0]['name'] = $histogram_path[0];
       $histogram[$language][0]['update'] = 0;
+      $histogram[$language][0]['histovalues'] = serialize($histogram_path[1]);
 
       $object->$field_name = $histogram;
     }
@@ -339,7 +340,7 @@ function histogram_field_formatter_view($entity_type, $entity, $field, $instance
 function histogram_field_is_empty($item, $field) {
   if ($field['type'] == 'histogram') {
 
-    if (empty($item['name']) && empty($item['histtype']) && empty($item['forcebw']) && empty($item['update']) && empty($item['bgcolor'])) {
+    if (empty($item['name']) && empty($item['histovalues']) && empty($item['histtype']) && empty($item['forcebw']) && empty($item['update']) && empty($item['bgcolor'])) {
       return TRUE;
     }
 
@@ -373,6 +374,10 @@ function histogram_field_widget_form(&$form, &$form_state, $field, $instance, $l
   $element['name'] = array(
     '#type' => 'hidden',
     '#default_value' => isset($items[$delta]['name']) ? $items[$delta]['name'] : NULL,
+  );
+  $element['histovalues'] = array(
+    '#type' => 'hidden',
+    '#default_value' => isset($items[$delta]['histovalues']) ? $items[$delta]['histovalues'] : NULL,
   );
   $element['update'] = array(
     '#type' => 'radios',
@@ -408,7 +413,7 @@ function histogram_field_widget_form(&$form, &$form_state, $field, $instance, $l
     '#type' => 'textfield',
     '#title' => t('Histogram Background Color'),
     '#default_value' => isset($items[$delta]['bgcolor']) ? $items[$delta]['bgcolor'] : '000000',
-    '#description' => t('Background color in hexadecimal numbers'),
+    '#description' => t('Background color in hexadecimal numbers. Leave blank for transparent background.'),
     '#element_validate' => array('_histogram_hexadecimal_validate'),
   );
   return $element;
@@ -420,13 +425,15 @@ function histogram_field_widget_form(&$form, &$form_state, $field, $instance, $l
  */
 function _histogram_hexadecimal_validate($element, &$form_state, $form) {
   $value = $element['#value'];
-  if ($value[0] != "#") {
+  if (empty($value)) {
+  }
+  else if ($value[0] != "#") {
     $value = "#" . $value;
-  }
-  if (preg_match('/^#[a-f0-9]{6}$/i', $value)) {
-  }
-  else {
-    form_error($element, t('Please enter a valid hexadecimal number'));
+    if (preg_match('/^#[a-f0-9]{6}$/i', $value)) {
+    }
+    else {
+      form_error($element, t('Please enter a valid hexadecimal number'));
+    }
   }
 }
 
